@@ -1,0 +1,159 @@
+version: 2
+jobs:
+  validate:
+    docker:
+      - image: hashicorp/terraform:0.12.13
+    working_directory: /tmp/workspace/terraform
+    environment:
+      AWS_DEFAULT_REGION: eu-west-1
+    aws_auth:
+        aws_access_key_id: $AWS_ACCESS_KEY_ID  # can specify string literal values
+        aws_secret_access_key: $AWS_SECRET_ACCESS_KEY  # or project UI envar referencesxx
+    steps:
+      - checkout
+      - run:
+          name: Install curl
+          command: apk add --update curl
+      # - run:
+      #     name: Install ruby
+      #     command: apk add --update ruby-full
+      # - run:
+      #     name: Install eyaml
+      #     command: gem install hiera-eyaml
+      # - run:
+      #     name: Paste the key
+      #     command: echo $PRIVATE_KEY >> keys/private_key.pkcs7.pem
+      # - run:
+      #     name: Check directory
+      #     command: ls keys
+      # - run:
+      #     name: check key
+      #     command: cat keys/private_key.pkcs7.pem
+      # - run:
+      #     name: Decrypt password
+      #     command: eyaml decrypt -f variables.tfvars.enc >> variables.tfvars
+      - run:
+          name: terraform init
+          command: find . -type f -name "*.tf" -exec dirname {} \;|sort -u | while read m; do (cd "$m" && terraform init -input=false -backend=false) || exit 1; done
+      - run:
+          name: Validate Terraform configurations
+          command: find . -name ".terraform" -prune -o -type f -name "*.tf" -exec dirname {} \;|sort -u | while read m; do (cd "$m" && terraform validate && echo "√ $m") || exit 1 ; done
+      - run:
+          name: Check if Terraform configurations are properly formatted
+          command: if [[ -n "$(terraform fmt -write=false)" ]]; then echo "Some terraform files need be formatted, run 'terraform fmt' to fix"; exit 1; fi
+      - run:
+          name: Install tflint
+          command: curl -L -o /tmp/tflint.zip https://github.com/wata727/tflint/releases/download/v0.8.2/tflint_linux_amd64.zip && unzip /tmp/tflint.zip -d /usr/local/bin
+      - run:
+          name: Check Terraform configurations with tflint
+          command: tflint
+      - run:
+          name: Check that plan works
+          command: | 
+            terraform init
+            terraform plan -var-file=variables.tfvars
+  deploy-terraform:
+    docker:
+      - image: hashicorp/terraform:0.12.13
+    working_directory: /tmp/workspace/terraform
+    environment:
+      AWS_DEFAULT_REGION: eu-west-1
+    aws_auth:
+        aws_access_key_id: $AWS_ACCESS_KEY_ID  # can specify string literal values
+        aws_secret_access_key: $AWS_SECRET_ACCESS_KEY  # or project UI envar referencesxx
+    steps:
+      - checkout
+      - run:
+          name: Terraform apply
+          command: | 
+            terraform init
+            terraform apply -var-file=variables.tfvars -auto-approve
+      - run:
+          name: "Get Hosts URLs"
+          command: |
+            terraform output -json rocketchat_hosts >> scripts/rocketchat_hosts.json  
+            terraform output -json mongo_hosts >> scripts/mongo_hosts.json
+            terraform output -json efs_dns >> scripts/efs_dns.json
+      - run:
+          name: "Sleeping for a bit"
+          command: "sleep 40"
+      - save_cache:
+          paths: 
+            - /tmp/workspace/terraform/scripts/mongo_hosts.json
+            - /tmp/workspace/terraform/scripts/rocketchat_hosts.json
+            - /tmp/workspace/terraform/scripts/efs_dns.json
+          key: endpoints-{{ .Revision }}
+  run-python:
+    docker:
+      - image: python:3.8.0-alpine
+    working_directory: /tmp/workspace/terraform
+    environment:
+      AWS_DEFAULT_REGION: eu-west-1
+    aws_auth:
+        aws_access_key_id: $AWS_ACCESS_KEY_ID  # can specify string literal values
+        aws_secret_access_key: $AWS_SECRET_ACCESS_KEY  # or project UI envar referencesxx
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - endpoints-{{ .Revision }}
+      - run:
+          name: "Run Python script"
+          command: python scripts/generate_commands.py mongo_hosts.json rocketchat_hosts.json efs_dns.json
+      - save_cache:
+          paths: 
+            -  /tmp/workspace/terraform/ansible_stuff/ansible_hosts
+            -  /tmp/workspace/terraform/ansible_stuff/init_mongo
+            -  /tmp/workspace/terraform/ansible_stuff/init_rocketchat
+            -  /tmp/workspace/terraform/ansible_stuff/init_efs
+          key: ansible_hosts-{{ .Revision }}
+      - store_artifacts:
+          path: /tmp/workspace/terraform
+  deploy-ansible:
+    docker:
+      - image: ansible/ubuntu14.04-ansible:stable
+    working_directory: /tmp/workspace/terraform
+    environment:
+      AWS_DEFAULT_REGION: eu-west-1
+    aws_auth:
+        aws_access_key_id: $AWS_ACCESS_KEY_ID  # can specify string literal values
+        aws_secret_access_key: $AWS_SECRET_ACCESS_KEY  # or project UI envar referencesxx
+    steps:
+    - checkout
+    - run:
+        name: "Create SSH Key"
+        command: echo $SSH_KEY >> /tmp/workspace/terraform/rocketchat.pem
+    - restore_cache:
+        keys:
+          - ansible_hosts-{{ .Revision }}
+    - run:
+        name: "Run Ansible"
+        command: |
+          cat /tmp/workspace/terraform/ansible_stuff/ansible_hosts
+          ansible-playbook -i /tmp/workspace/terraform/ansible_stuff/ansible_hosts /tmp/workspace/terraform/ansible_stuff/playbook.yml
+workflows:
+  version: 2
+  validate-and-deploy:
+    jobs:
+      - validate
+      - deploy-terraform:
+          requires:
+            - validate  
+          filters:
+            branches:
+              only: master
+      - run-python:
+          requires:
+            - validate  
+            - deploy-terraform
+          filters:
+            branches:
+              only: master
+      - deploy-ansible:
+          requires:
+            - validate  
+            - deploy-terraform
+            - run-python
+          filters:
+            branches:
+              only: master
