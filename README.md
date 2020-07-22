@@ -1,7 +1,7 @@
 # rocketchat-infra
 Infrastructure for RocketChat in AWS!
 
-Access at https://rocketchat.toastedbuns.co.uk
+Access at https://rocketchat.example.co.uk
 
 Done with Terraform, Ansible, Python and Shell.
 

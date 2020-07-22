@@ -17,7 +17,7 @@ resource "aws_cloudfront_distribution" "rocketchat_distribution" {
   enabled             = true
   comment             = "CDN for Rocketchat"
   default_root_object = "index.html"
-  aliases = ["rocketchat.toastedbuns.co.uk"]
+  aliases = ["rocketchat.example.co.uk"]
   wait_for_deployment = false
 
   default_cache_behavior {

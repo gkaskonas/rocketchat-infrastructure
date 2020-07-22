@@ -42,7 +42,7 @@ def generate_rocketchat_command(hosts):
     mongo_url = 'mongodb://{0}'.format(line)[:-1]
 
 
-    final_string = "#!/bin/bash\nsudo docker run -d -v /mnt/efs/rocketchat:/app/uploads -e PORT=3000 -e ROOT_URL=https://rocketchat.toastedbuns.co.uk \
+    final_string = "#!/bin/bash\nsudo docker run -d -v /mnt/efs/rocketchat:/app/uploads -e PORT=3000 -e ROOT_URL=https://rocketchat.example.co.uk \
     -e MONGO_URL={0}/rocketchat?replicaSet=rocketchat -e MONGO_OPLOG_URL={0}/local?replicaSet=rocketchat -e Accounts_UseDNSDomainCHeck=True -p 3000:3000 rocket.chat:latest".format(mongo_url)
 
     f = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '../ansible_stuff/init_rocketchat'), 'w')

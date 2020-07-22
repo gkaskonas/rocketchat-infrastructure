@@ -36,12 +36,12 @@ data "aws_subnet_ids" "all" {
 }
 
 resource "aws_route53_zone" "primary" {
-  name = "toastedbuns.co.uk"
+  name = "example.co.uk"
 }
 
 resource "aws_route53_record" "rocketchat" {
   zone_id = "${aws_route53_zone.primary.zone_id}"
-  name    = "rocketchat.toastedbuns.co.uk"
+  name    = "rocketchat.example.co.uk"
   type    = "A"
   alias {
     name                   = "${module.cdn.domain_name}"
