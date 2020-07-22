@@ -1,0 +1,36 @@
+---
+- hosts: dbservers
+  remote_user: ubuntu
+  tasks:
+    - name: Copy file with owner and permissions
+      copy:
+        src: /tmp/workspace/terraform/ansible_stuff/init_mongo
+        dest: /home/ubuntu/init_mongo.sh
+        owner: ubuntu
+        group: ubuntu
+        mode: '0777'
+    - name: Run a script with arguments
+      shell: /home/ubuntu/init_mongo.sh
+- hosts: webservers
+  remote_user: ubuntu
+  tasks:
+    - name:
+      shell: sleep 20
+    - name: Copy file with owner and permissions
+      copy:
+        src: /tmp/workspace/terraform/ansible_stuff/init_efs
+        dest: /home/ubuntu/init_efs.sh
+        owner: ubuntu
+        group: ubuntu
+        mode: '0777'
+    - name: Run a script with arguments
+      shell: /home/ubuntu/init_efs.sh 
+    - name: Copy file with owner and permissions
+      copy:
+        src: /tmp/workspace/terraform/ansible_stuff/init_rocketchat
+        dest: /home/ubuntu/init_rocketchat.sh
+        owner: ubuntu
+        group: ubuntu
+        mode: '0777'
+    - name: Run a script with arguments
+      shell: /home/ubuntu/init_rocketchat.sh 
